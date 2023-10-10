@@ -2,7 +2,7 @@
 
 [[https://melpa.org/#/tabnine][file:https://melpa.org/packages/tabnine-badge.svg]]  [[https://github.com/shuxiao9058/tabnine/actions/workflows/melpazoid.yml][https://github.com/shuxiao9058/tabnine/actions/workflows/melpazoid.yml/badge.svg]]
 
-An unofficial TabNine(with TabNine Chat supported) package for Emacs.
+An unofficial TabNine (with TabNine Chat supported) package for Emacs.
 
 * Screen Recording
 
@@ -32,7 +32,7 @@ An unofficial TabNine(with TabNine Chat supported) package for Emacs.
 
 TabNine is available on [[https://melpa.org/#/tabnine][Melpa]], you can install it with your favorite package manager.
 
-@@html:<details>@@@@html:<summary>@@ *Example for manully install* @@html:</summary>@@
+@@html:<details>@@@@html:<summary>@@ *Example for manual install* @@html:</summary>@@
 
 - Install =tabnine=.
 
@@ -43,7 +43,7 @@ Clone or download this repository and add to your load path:
 (require 'tabnine)
 #+end_src
 
-- Other configurations, eg: enable =tabnine-mode= in =prog-mode=.
+- Other configurations, e.g. enable =tabnine-mode= in =prog-mode=.
 
 #+begin_src elisp
 (with-eval-after-load 'company
@@ -51,6 +51,7 @@ Clone or download this repository and add to your load path:
   (delq 'company-preview-if-just-one-frontend company-frontends))
 
 (with-eval-after-load 'tabnine
+  ;; (kbd "TAB") is literal ctrl-I, (kbd "<tab>) is the actual tab key
   (define-key tabnine-completion-map (kbd "TAB") #'tabnine-accept-completion)
   (define-key tabnine-completion-map (kbd "<tab>") #'tabnine-accept-completion)
 
@@ -68,7 +69,7 @@ Clone or download this repository and add to your load path:
 - Run =M-x tabnine-install-binary= to install the TabNine binary for your system.
 @@html:</details>@@
 
-@@html:<details>@@@@html:<summary>@@ *Example for use-package(straight)* @@html:</summary>@@
+@@html:<details>@@@@html:<summary>@@ *Example for use-package (straight)* @@html:</summary>@@
 
 #+begin_src elisp
 (use-package tabnine
@@ -175,15 +176,15 @@ dotspacemacs-additional-packages
 
 *** Install TabNine binary
 
-After installed the TabNine package, you should execute =tabnine-install-binary= interactive command to install Tabnine binary to finish installation.
+After installing the TabNine package, you should finish the installation by executing the interactive command =tabnine-install-binary=.
 
 ** TabNine configuration
 
-The advanced features(eg: advanced completions, TabNine Chat) requires a =TabNine Pro= account, open TabNine Hub page with  =tabnine-configuration= after installation. Then login with your account.
+The advanced features (e.g. advanced completions, TabNine Chat) require a =TabNine Pro= account. Open the TabNine Hub page with =tabnine-configuration= after installation. Then login with your account.
 
 ** TabNine Chat
 
-TabNine Chat is still in BETA - to join the BETA - send =Tabnine Pro= email to =support@tabnine.com= to join BETA, while chat fails you can try with vscode to see whether the beta feature is available, also you can view you account's capabilities with =tabnine-capabilities= function.
+TabNine Chat is still in BETA; to join the BETA, send =Tabnine Pro= email to =support@tabnine.com=. While chat fails you can try with VS Code to see whether the beta feature is available, also you can view your account's capabilities with the =tabnine-capabilities= function.
 
 | Command                             | Prompt                                        |
 |-------------------------------------+-----------------------------------------------|
@@ -224,13 +225,13 @@ None.
 
 * Known Issues
 
-** Heavily memory and CPU usage
+** Heavy memory and CPU usage
 
 - TabNine's local deep learning completion might be enabled by default. It is very CPU-intensive if your device can't handle it. You can check by typing "TabNine::config" in any buffer (your browser should then automatically open to TabNine's config page) and disable Deep TabNine Local (you will lose local deep learning completion). More details [[https://www.tabnine.com/blog/tabnine-memory-and-cpu-usage/][here]].
 
 ** ICON displayed error
 
-If candidate icons of tabnine displayed unnormally [[https://github.com/shuxiao9058/tabnine/issues/1][capf icon error]], try set =kind-icon-mapping= for tabnine:
+If candidate icons of tabnine are displayed wrongly [[https://github.com/shuxiao9058/tabnine/issues/1][capf icon error]], try to set =kind-icon-mapping= for tabnine:
 
 - With all-the-icons
 
