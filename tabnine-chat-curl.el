@@ -54,7 +54,7 @@
 INFO is the chat info to send, TOKEN is a unique identifier.."
   (let* ((request (tabnine-chat--make-request info))
 	 (data (tabnine-util--json-serialize request))
-	 (url (format "%s/chat/generate_chat_response" tabnine-api-server))
+	 (url (format "%s/chat/v3/generate_chat_response" tabnine-api-server))
          (headers
           `(("Content-Type" . "application/json; charset=utf-8")
             ("Authorization" . ,(concat "Bearer " (tabnine--access-token))))))
@@ -237,14 +237,14 @@ PROCESS is the process under watch, OUTPUT is the output received."
                        #'tabnine-chat-curl--stream-insert-response)
                    (let* ((content-strs))
 		     (condition-case nil
-			 (while (re-search-forward "^\{" nil t)
+			 (while (re-search-forward "\{" nil t)
 			   (when-let* ((line-content (decode-coding-string
 						      (buffer-substring-no-properties
-						       (line-beginning-position)
+						       (1- (point))
 						       (save-excursion
 							 (end-of-line) (point)))
-						      'utf-8) )
-				       (response (tabnine-util--read-json line-content))
+						      'utf-8))
+				       (response (tabnine-util--read-json (s-trim line-content)))
 				       (content (plist-get response :text)))
 			     (push content content-strs))
 			   (forward-line))

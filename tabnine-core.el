@@ -81,7 +81,7 @@ Complete immediately if set to 0."
   :group 'tabnine
   :type 'integer)
 
-(defcustom tabnine-wait-disabled-method '(prefetch)
+(defcustom tabnine-wait-disabled-method '(prefetch configuration)
   "List of wait disabled method."
   :group 'tabnine
   :type '(repeat symbol))
@@ -264,12 +264,14 @@ REQUEST should be JSON-serializable object."
 
      (when tabnine--process
        (let ((encoded (concat
-		       (tabnine-util--json-serialize ,request) "\n")))
+		       (tabnine-util--json-serialize ,request) "\n"))
+	     (wait (not (memq tabnine--request-method tabnine-wait-disabled-method))))
 	 (setq tabnine--response nil)
 	 ;; (setq tabnine--completion-cache-result nil)
 	 (tabnine--log-to-debug-file "Write to TabNine process" encoded)
 	 (process-send-string tabnine--process encoded)
-	 (accept-process-output tabnine--process tabnine-wait)))))
+	 (when wait
+	   (accept-process-output tabnine--process tabnine-wait))))))
 
 (defun tabnine--make-request (method)
   "Create request body for method METHOD and parameters PARAMS."
@@ -492,6 +494,7 @@ REQUEST should be JSON-serializable object."
      (let ((num 0)
 	   (max-retry (or tabnine-max-wait-count-while-nil 5))
 	   (request (tabnine--make-request ,method))
+	   (tabnine--request-method ,method)
 	   (wait (not (memq ,method tabnine-wait-disabled-method))))
        (tabnine--send-request request)
        (while (and wait (< num max-retry) (not tabnine--response))

@@ -60,7 +60,7 @@
 Should at least include following keys:
 contexts: cached contexts in array(vector)
 size: size of cached context in bytes
-last-editor-context-hash: last success context hash.")
+last-context-hash: last success context hash.")
 
 (defcustom tabnine-chat-default-mode (if (featurep 'markdown-mode)
 					 'markdown-mode
@@ -90,6 +90,7 @@ is only inserted in dedicated tabnine chat buffers."
 
 (defvar-local tabnine-chat--num-messages-to-send nil)
 (defvar-local tabnine-chat--old-header-line nil)
+(defvar-local tabnine-chat--intent nil)
 
 (defvar tabnine-chat--debug nil
     "TabNine chat debugging.")
@@ -112,9 +113,9 @@ is only inserted in dedicated tabnine chat buffers."
 (defun tabnine-chat--update-header-line (msg face)
   "Update header line with status MSG in FACE."
   (and tabnine-chat-mode (consp header-line-format)
-    (setf (nth 1 header-line-format)
-          (propertize msg 'face face))
-    (force-mode-line-update)))
+       (setf (nth 1 header-line-format)
+             (propertize msg 'face face))
+       (force-mode-line-update)))
 
 (defcustom tabnine-chat-stream t
   "Whether responses from TabNine Chat be played back as they are received.
@@ -202,7 +203,6 @@ use for TabNine Chat."
 (defvar tabnine-chat--conversation-id nil
   "The TabNine chat conversation id.")
 
-
 (defun tabnine-chat--conversion-id()
   "Get conversion ID."
   (unless tabnine-chat--conversation-id
@@ -213,66 +213,74 @@ use for TabNine Chat."
   "Signal user error while TabNine Chat feature not available."
   (user-error "TabNine Chat feature is NOT available yet, please send Tabnine Pro email to support@tabnine.com to join BETA"))
 
-(defun tabnine-chat--context-info(context)
-  "Get CONTEXT's hash."
-  (let ((txt (format "%s%s%s" (or (plist-get context :fileCode) "")
-		 (or (plist-get context :selectedCode) "")
-		 (or (plist-get context :lineTextAtCursor) ""))))
-      (list :hash (md5 txt) :size  (length txt))))
+(defun tabnine-chat--context-info(user-context selected-code)
+  "Get context's hash with USER-CONTEXT and SELECTED-CODE."
+  (let* ((current-line-index
+	  (when-let* ((enriching-context (plist-get user-context :enrichingContextData))
+		      (first-el (elt enriching-context 0)))
+	    (plist-get first-el :currentLineIndex)))
+	 (txt (format "%s%s%s" (or (plist-get user-context :fileCode) "")
+		      (or (when selected-code
+			    (plist-get selected-code :code)) "")
+		      (if current-line-index
+			  (number-to-string current-line-index) ""))))
+    (list :hash (md5 txt) :size  (length txt))))
 
-(defun tabnine-chat--editor-context()
-  "Return the editor context for the current state."
+(defun tabnine-chat--user-context()
+  "Return the context for the current state."
   (let ((file-content (decode-coding-string
 		       (buffer-substring-no-properties (point-min) (point-max))
 		       'utf-8))
-	(selected-code (when (region-active-p)
-			 (buffer-substring-no-properties
-			  (region-beginning)
-			  (region-end))))
-	;; (selected-code-usages)
 	(file-uri (tabnine-util--path-to-uri (buffer-name)))
-	(language (tabnine-util--language-id-buffer))
-	(line-text-at-cursor (decode-coding-string
-			      (buffer-substring-no-properties
-			       (save-excursion
-				 (beginning-of-line) (point))
-			       (save-excursion
-				 (end-of-line) (point)))
-			      'utf-8))
-	;; (metadata)
-	)
+	(language (tabnine-util--language-id-buffer)))
     (list
-     :fileCode file-content
-     :selectedCode selected-code
-     ;; :selectedCodeUsages
-     :diagnosticsText (tabnine-chat--diagnostics-text)
-     :fileUri file-uri
-     :language (or language tabnine-chat-default-language)
-     :lineTextAtCursor line-text-at-cursor
-     :metadata nil)))
+     :basicContext (list
+		    :fileUri file-uri
+		    :language (or language tabnine-chat-default-language))
+     :enrichingContextData (vector
+			    (list
+			     :type "Editor"
+			     :fileCode file-content
+			     :currentLineIndex (1- (line-number-at-pos)))))))
 
 (defun tabnine-chat--make-request (info)
   "TabNine api make request with INFO.
 Method can be explain-code, document-code, generate-test-for-code or fix-code."
   (with-current-buffer (or (plist-get info :context-buffer) (tabnine-chat--context-buffer) (current-buffer))
-    (let* ((editor-context (tabnine-chat--editor-context))
+    (let* ((user-context (tabnine-chat--user-context))
+	   (intent (when (and tabnine-chat--intent (symbolp tabnine-chat--intent))
+		     (symbol-name tabnine-chat--intent)))
+	   (selected-code (when (region-active-p)
+			    (list
+			     :code (buffer-substring-no-properties
+				    (region-beginning)
+				    (region-end))
+			     :startLine (1- (line-number-at-pos (region-beginning)))
+			     :endLine (1- (line-number-at-pos (region-end))))))
 	   (context (list
-		     ;; :retrievalContext
 		     :id (tabnine-util--random-uuid)
+		     :conversationId (tabnine-chat--conversion-id)
 		     :text (plist-get info :prompt)
+		     :isBot :json-false
+		     :intent intent
+		     ;; current unix timestamp in milliseconds
+		     :timestamp (number-to-string (car (time-convert (current-time) 1000)))
 		     :by "user"))
 	   (contexts (tabnine-chat--cached-contexts
-		      context editor-context)))
+		      context user-context selected-code)))
       (list
+       :modelParams
+       (list :temperature 0.3
+	     :top_p 0.95)
        :conversationId (tabnine-chat--conversion-id)
        :messageId (tabnine-util--random-uuid)
        :input contexts
        :isTelemetryEnabled :json-false))))
 
-(defun tabnine-chat--cached-contexts(context &optional editor-context)
-  "Cache TabNine Chat CONTEXT with EDITOR-CONTEXT.
+(defun tabnine-chat--cached-contexts(context &optional user-context selected-code)
+  "Cache TabNine Chat CONTEXT with USER-CONTEXT and SELECTED-CODE.
 
-Return contexts result, editor-context nil means result from assist."
+Return contexts result, user-context nil means result from assist."
   (let* ((by (plist-get context :by))
 	 (context-size (+ (length (plist-get context :id))
 			  (length (plist-get context :text))
@@ -280,22 +288,23 @@ Return contexts result, editor-context nil means result from assist."
 	 (context-info)
 	 (contexts)
 	 (size)
-	 (last-editor-context-hash)
+	 (last-context-hash)
 	 (hash))
-    (when editor-context
-      (setq context-info (tabnine-chat--context-info editor-context))
+    (when user-context
+      (setq context-info (tabnine-chat--context-info user-context selected-code))
       (setq hash (plist-get context-info :hash)))
 
     (when tabnine-chat--cached-contexts
       (setq contexts (plist-get tabnine-chat--cached-contexts :contexts))
       (setq size (plist-get tabnine-chat--cached-contexts :size))
-      (setq last-editor-context-hash (plist-get tabnine-chat--cached-contexts :last-editor-context-hash)))
+      (setq last-context-hash (plist-get tabnine-chat--cached-contexts :last-context-hash)))
 
     (setq size (+ (or size 0) context-size))
-    (when (and (equal "user" by) (not (and last-editor-context-hash (equal last-editor-context-hash hash))))
-      (plist-put context :editorContext editor-context)
+    (when (and (equal "user" by) (not (and last-context-hash (equal last-context-hash hash))))
+      (plist-put context :userContext user-context)
+      (plist-put context :selectedCode selected-code)
       (setq size (+ size (plist-get context-info :size)))
-      (setq last-editor-context-hash hash))
+      (setq last-context-hash hash))
 
     (if contexts
 	(setq contexts (vconcat contexts (vector context)))
@@ -304,11 +313,11 @@ Return contexts result, editor-context nil means result from assist."
     (if tabnine-chat--cached-contexts
 	(progn
 	  (plist-put tabnine-chat--cached-contexts :size size)
-	  (plist-put tabnine-chat--cached-contexts :last-editor-context-hash last-editor-context-hash)
+	  (plist-put tabnine-chat--cached-contexts :last-context-hash last-context-hash)
 	  (plist-put tabnine-chat--cached-contexts :contexts contexts))
       (setq tabnine-chat--cached-contexts (list :size size
 						:contexts contexts
-						:last-editor-context-hash last-editor-context-hash)))
+						:last-context-hash last-context-hash)))
     (tabnine-chat--context-cleanup)
     contexts))
 
@@ -321,25 +330,27 @@ Return contexts result, editor-context nil means result from assist."
 	(drop-size 0))
     (while (> (- size drop-size)  tabnine-chat-max-cached-context-size)
       (let* ((ctx (elt contexts drop-num))
-	    (ctx-size (+ (length (plist-get ctx :id))
+	     (ctx-size (+ (length (plist-get ctx :id))
 			  (length (plist-get ctx :text))
 			  (length (plist-get ctx :by))))
-	    (ed-ctx (plist-get ctx :editorContext))
-	     (ctx-info (and ed-ctx (tabnine-chat--context-info ed-ctx)))
+	     (ed-ctx (plist-get ctx :userContext))
+	     (selectedCode (plist-get ctx :selectedCode))
+	     (ctx-info (and ed-ctx (tabnine-chat--context-info ed-ctx selectedCode)))
 	     (ed-ctx-size (or (and ctx-info (plist-get ctx-info :size)) 0)))
-	     (setq drop-size (+ drop-size ctx-size ed-ctx-size))
-	     (setq drop-num (1+ drop-num))))
+	(setq drop-size (+ drop-size ctx-size ed-ctx-size))
+	(setq drop-num (1+ drop-num))))
     (setq drop-num-2 (- (length contexts) tabnine-chat-max-context-length))
     (while (and (> drop-num-2 drop-num))
       (let* ((ctx (elt contexts drop-num))
-	    (ctx-size (+ (length (plist-get ctx :id))
+	     (ctx-size (+ (length (plist-get ctx :id))
 			  (length (plist-get ctx :text))
 			  (length (plist-get ctx :by))))
-	    (ed-ctx (plist-get ctx :editorContext))
-	     (ctx-info (and ed-ctx (tabnine-chat--context-info ed-ctx)))
+	     (ed-ctx (plist-get ctx :userContext))
+	     (selectedCode (plist-get ctx :selectedCode))
+	     (ctx-info (and ed-ctx (tabnine-chat--context-info ed-ctx selectedCode)))
 	     (ed-ctx-size (or (and ctx-info (plist-get ctx-info :size)) 0)))
-	     (setq drop-size (+ drop-size ctx-size ed-ctx-size))
-	     (setq drop-num (1+ drop-num))))
+	(setq drop-size (+ drop-size ctx-size ed-ctx-size))
+	(setq drop-num (1+ drop-num))))
     (when (> drop-num 0)
       (plist-put tabnine-chat--cached-contexts :contexts (seq-drop contexts drop-num))
       (plist-put tabnine-chat--cached-contexts :size
@@ -363,15 +374,15 @@ the response is inserted into the current buffer after point."
             ("Authorization" . ,(concat "Bearer " (tabnine--access-token)))))
 	 (request (tabnine-chat--make-request info))
 	 (url-request-data (tabnine-util--json-serialize request)))
-    (url-retrieve (format "%s/chat/generate_chat_response" tabnine-api-server)
+    (url-retrieve (format "%s/chat/v3/generate_chat_response" tabnine-api-server)
                   (lambda (_)
                     (pcase-let ((`(,response, _ ,http-msg ,error)
                                  (tabnine-chat--parse-http-response (current-buffer) t)))
-                      (plist-put info :status http-msg)
-                      (when error (plist-put info :error error))
-                      (funcall (or callback #'tabnine-chat--insert-response)
-                               response info)
-                      (kill-buffer)))
+		      (plist-put info :status http-msg)
+		      (when error (plist-put info :error error))
+		      (funcall (or callback #'tabnine-chat--insert-response)
+			       response info)
+		      (kill-buffer)))
                   nil t nil)))
 
 (defun tabnine-chat--context-buffer()
@@ -499,6 +510,7 @@ specifying a custom CALLBACK!"
   "TabNine Chat request by METHOD."
   (let* ((stream tabnine-chat-stream)
          (output-to-other-buffer-p t)
+	 (tabnine-chat--intent method)
 	 (prompt (alist-get method tabnine-chat-prompt-alist))
 	 (tabnine-chat-buffer-name tabnine-chat-default-session)
          (buffer (tabnine-chat tabnine-chat-buffer-name))
@@ -518,7 +530,7 @@ specifying a custom CALLBACK!"
      :callback nil)
     (when output-to-other-buffer-p
       (message (concat "Prompt sent to buffer: "
-                       (propertize tabnine-chat-buffer-name 'face 'help-key-binding)))
+		       (propertize tabnine-chat-buffer-name 'face 'help-key-binding)))
       (display-buffer
        buffer '((display-buffer-reuse-window
                  display-buffer-pop-up-window)
@@ -549,8 +561,9 @@ Return body, http-status, http-msg and error in list."
 			   (line-end-position)))))
 	     (start (save-excursion
 		      (goto-char (point-min))
-		      (if (re-search-forward "^\{" nil t)
+		      (if (re-search-forward "\{" nil t)
 			  (line-beginning-position)
+			;; (1- (point))
 			(forward-paragraph)
 			(point))))
 	     (end (save-excursion
@@ -570,7 +583,7 @@ Return body, http-status, http-msg and error in list."
 	 ((equal http-status "200")
 	  (if decode
 	      (let* ((trim-body (s-trim body))
-		     (ss (s-split "\n" trim-body))
+		     (ss (tabnine-chat--transform-body trim-body))
 		     (ss (cl-remove-if (lambda(x) (not (s-present? x))) ss))
 		     (json-ss (mapcar (lambda(x) (tabnine-util--read-json x)) ss))
 		     (first-el (car json-ss))
@@ -607,6 +620,26 @@ Return body, http-status, http-msg and error in list."
 	      (message "Unknow error: %s, buffer text: %s" http-msg (buffer-string)))
 	    (list nil http-status http-msg (concat "Unknow error: " http-msg))))))))
 
+(defun tabnine-chat--transform-body(trim-body)
+  "TabNine transform TRIM-BODY to result arrary."
+  (when trim-body
+    (let* ((ss (s-split "\n" trim-body))
+	   (ss (mapcar
+		(lambda(x)
+		  (when x
+		    (with-temp-buffer
+		      (insert x)
+		      (goto-char (point-min))
+		      (if (re-search-forward "\{" nil t)
+			  (let ((txt (buffer-substring
+				      (1- (point))
+				      (save-excursion
+					(end-of-line) (point)))))
+			    (when txt
+			      (setq txt (s-trim txt)))
+			    txt))))) ss)))
+      ss)))
+
 (defun tabnine-chat--results-to-text(results)
   "TabNine RESULTS in sequence to text."
   (when results
@@ -621,7 +654,7 @@ Return body, http-status, http-msg and error in list."
   (interactive)
   (message "Querying TabNine Chat ...")
   (tabnine-chat--request nil
-     :stream tabnine-chat-stream))
+			 :stream tabnine-chat-stream))
 
 (defun tabnine-chat--insert-response (response info)
   "Insert RESPONSE from TabNine Chat into the TabNine Chat buffer.
@@ -649,10 +682,10 @@ See `tabnine-chat--url-get-response' for details."
       (if response
           (progn
             (setq response (tabnine-chat--transform-response
-                               response tabnine-chat-buffer))
+                            response tabnine-chat-buffer))
             (save-excursion
-              (put-text-property 0 (length response) 'tabnine-chat 'response response)
-              (with-current-buffer (marker-buffer start-marker)
+	      (put-text-property 0 (length response) 'tabnine-chat 'response response)
+	      (with-current-buffer (marker-buffer start-marker)
                 (goto-char start-marker)
                 (unless (or (bobp) (plist-get info :in-place))
                   (insert "\n\n"))
@@ -660,7 +693,7 @@ See `tabnine-chat--url-get-response' for details."
                   (insert response)
                   (pulse-momentary-highlight-region p (point)))
                 (when tabnine-chat-mode (insert "\n\n" (tabnine-chat-prompt-prefix-string))))
-              (when tabnine-chat-mode (tabnine-chat--update-header-line " Ready" 'success))))
+	      (when tabnine-chat-mode (tabnine-chat--update-header-line " Ready" 'success))))
         (tabnine-chat--update-header-line
          (format " Response Error: %s" status-str) 'error)
         (message "TabNine Chat response error: (%s) %s"
@@ -721,7 +754,7 @@ If region is active, use it as the INITIAL prompt. Returns the
 buffer created or switched to."
   (interactive (list (if current-prefix-arg
 			 (read-string "Session name: " (generate-new-buffer-name tabnine-chat-default-session))
-                       tabnine-chat-default-session)
+		       tabnine-chat-default-session)
                      (and (use-region-p)
                           (buffer-substring (region-beginning)
                                             (region-end)))))
@@ -739,7 +772,7 @@ buffer created or switched to."
     (when (called-interactively-p 'tabnine-chat)
       (pop-to-buffer (current-buffer))
       (message "Send your query with %s!"
-               (substitute-command-keys "\\[tabnine-chat-send]")))
+	       (substitute-command-keys "\\[tabnine-chat-send]")))
     (current-buffer)))
 
 (defun tabnine-chat--convert-org (content buffer)
@@ -769,28 +802,28 @@ elements."
                         (insert "#+begin_src ")
                         (when (re-search-forward "^```" nil t)
                           (replace-match "#+end_src")))
-               (replace-match "=")))
+	       (replace-match "=")))
         ("**" (cond
-               ((looking-at "\\*\\(?:[[:word:]]\\|\s\\)")
+	       ((looking-at "\\*\\(?:[[:word:]]\\|\s\\)")
                 (delete-char 1))
-               ((looking-back "\\(?:[[:word:]]\\|\s\\)\\*\\{2\\}"
-                              (max (- (point) 3) (point-min)))
+	       ((looking-back "\\(?:[[:word:]]\\|\s\\)\\*\\{2\\}"
+			      (max (- (point) 3) (point-min)))
                 (delete-char -1))))
         ((or "_" "*")
          (if (save-match-data
-               (and (looking-back "\\(?:[[:space:]]\\|\s\\)\\(?:_\\|\\*\\)"
+	       (and (looking-back "\\(?:[[:space:]]\\|\s\\)\\(?:_\\|\\*\\)"
                                   (max (- (point) 2) (point-min)))
                     (not (looking-at "[[:space:]]\\|\s"))))
              ;; Possible beginning of italics
              (and
-              (save-excursion
+	      (save-excursion
                 (when (and (re-search-forward (regexp-quote (match-string 0)) nil t)
                            (looking-at "[[:space]]\\|\s")
                            (not (looking-back "\\(?:[[:space]]\\|\s\\)\\(?:_\\|\\*\\)"
-                                              (max (- (point) 2) (point-min)))))
+					      (max (- (point) 2) (point-min)))))
                   (delete-char -1)
                   (insert "/") t))
-              (progn (delete-char -1)
+	      (progn (delete-char -1)
                      (insert "/")))))))
     (buffer-string)))
 
@@ -805,10 +838,10 @@ text stream."
            (start-pt (make-marker))
            (cleanup-fn
             (lambda ()
-              (when (buffer-live-p (get-buffer temp-buf))
+	      (when (buffer-live-p (get-buffer temp-buf))
                 (set-marker start-pt nil)
                 (kill-buffer temp-buf))
-              (remove-hook 'tabnine-chat-post-response-hook cleanup-fn))))
+	      (remove-hook 'tabnine-chat-post-response-hook cleanup-fn))))
     (add-hook 'tabnine-chat-post-response-hook cleanup-fn)
     (lambda (str)
       (let ((noop-p))
@@ -818,15 +851,15 @@ text stream."
           (when (marker-position start-pt) (goto-char start-pt))
           (save-excursion
             (while (re-search-forward "`\\|\\*\\{1,2\\}\\|_" nil t)
-              (pcase (match-string 0)
+	      (pcase (match-string 0)
                 ("`"
                  (cond
                   ((looking-at "``")
                    (backward-char 1)
                    (delete-char 3)
                    (if in-src-block
-                       (progn (insert "#+end_src")
-                              (setq in-src-block nil))
+		       (progn (insert "#+end_src")
+			      (setq in-src-block nil))
                      (insert "#+begin_src ")
                      (setq in-src-block t)))
                   ((looking-at "`\\|$")
@@ -853,9 +886,9 @@ text stream."
                    (delete-char -1)
                    (insert "/"))))))
           (if noop-p
-              (buffer-substring (point) start-pt)
+	      (buffer-substring (point) start-pt)
             (prog1 (buffer-substring (point) (point-max))
-                   (set-marker start-pt (point-max)))))))))
+	      (set-marker start-pt (point-max)))))))))
 
 ;;
 ;; TabNine Chat Operations
