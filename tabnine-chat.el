@@ -93,7 +93,7 @@ is only inserted in dedicated tabnine chat buffers."
 (defvar-local tabnine-chat--intent nil)
 
 (defvar tabnine-chat--debug nil
-    "TabNine chat debugging.")
+  "TabNine chat debugging.")
 
 (define-minor-mode tabnine-chat-mode
   "Minor mode for interacting with TabNine Chat."
@@ -333,11 +333,11 @@ Return contexts result, user-context nil means result from assist."
 	     (ctx-size (+ (length (plist-get ctx :id))
 			  (length (plist-get ctx :text))
 			  (length (plist-get ctx :by))))
-	     (ed-ctx (plist-get ctx :userContext))
+	     (user-ctx (plist-get ctx :userContext))
 	     (selectedCode (plist-get ctx :selectedCode))
-	     (ctx-info (and ed-ctx (tabnine-chat--context-info ed-ctx selectedCode)))
-	     (ed-ctx-size (or (and ctx-info (plist-get ctx-info :size)) 0)))
-	(setq drop-size (+ drop-size ctx-size ed-ctx-size))
+	     (ctx-info (and user-ctx (tabnine-chat--context-info user-ctx selectedCode)))
+	     (user-ctx-size (or (and ctx-info (plist-get ctx-info :size)) 0)))
+	(setq drop-size (+ drop-size ctx-size user-ctx-size))
 	(setq drop-num (1+ drop-num))))
     (setq drop-num-2 (- (length contexts) tabnine-chat-max-context-length))
     (while (and (> drop-num-2 drop-num))
@@ -345,11 +345,11 @@ Return contexts result, user-context nil means result from assist."
 	     (ctx-size (+ (length (plist-get ctx :id))
 			  (length (plist-get ctx :text))
 			  (length (plist-get ctx :by))))
-	     (ed-ctx (plist-get ctx :userContext))
+	     (user-ctx (plist-get ctx :userContext))
 	     (selectedCode (plist-get ctx :selectedCode))
-	     (ctx-info (and ed-ctx (tabnine-chat--context-info ed-ctx selectedCode)))
-	     (ed-ctx-size (or (and ctx-info (plist-get ctx-info :size)) 0)))
-	(setq drop-size (+ drop-size ctx-size ed-ctx-size))
+	     (ctx-info (and user-ctx (tabnine-chat--context-info user-ctx selectedCode)))
+	     (user-ctx-size (or (and ctx-info (plist-get ctx-info :size)) 0)))
+	(setq drop-size (+ drop-size ctx-size user-ctx-size))
 	(setq drop-num (1+ drop-num))))
     (when (> drop-num 0)
       (plist-put tabnine-chat--cached-contexts :contexts (seq-drop contexts drop-num))

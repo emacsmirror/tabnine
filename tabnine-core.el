@@ -467,7 +467,7 @@ REQUEST should be JSON-serializable object."
   (unless tabnine--chat-enabled
     (tabnine-capabilities)
     (when tabnine--chat-enabled
-    (tabnine-state)))
+      (tabnine-state)))
 
   (dolist (hook tabnine--hooks-alist)
     (add-hook (car hook) (cdr hook))))
@@ -530,8 +530,8 @@ REQUEST should be JSON-serializable object."
 	(setq tabnine--chat-enabled t)))
     (if (called-interactively-p 'interactive)
 	(if tabnine--chat-enabled
-	      (message (tabnine-util--json-serialize response))
-	    (user-error "TabNine Chat feature is not available"))
+	    (message (tabnine-util--json-serialize response))
+	  (user-error "TabNine Chat feature is not available"))
       response)))
 
 (defun tabnine-state ()
@@ -611,11 +611,11 @@ PROCESS is the process under watch, EVENT is the event occurred."
 (defun tabnine--completion-capf-p(completion)
   "Check COMPLETION is capf result."
   (tabnine-util--dbind (:new_prefix) completion
-		  (let ((line (length (s-split "\n" (s-trim new_prefix)))))
-		    (<= line 2))))
+    (let ((line (length (s-split "\n" (s-trim new_prefix)))))
+      (<= line 2))))
 
 (defun tabnine--response-display-with-capf-p(response)
-  "Test RESPONSE whether display with overlay."
+  "Test RESPONSE whether display with capf."
   (when response
     (let* ((display-with-overlay)
 	   (results (plist-get response :results)))
@@ -624,7 +624,7 @@ PROCESS is the process under watch, EVENT is the event occurred."
 		(setq display-with-overlay t))) results)
       (when (not tabnine--trigger-with-capf)
 	(setq display-with-overlay t))
-      (not display-with-overlay))))
+      (or (not tabnine-mode) (not display-with-overlay)))))
 
 (defun tabnine--response-latest-completion-p(response)
   "Test RESPONSE if the latest completion."
@@ -639,8 +639,8 @@ PROCESS is the process under watch, EVENT is the event occurred."
 						  :test #'s-equals-p))
 	       (completions (cl-remove-duplicates completions
 						  :key (lambda (x) (let ((new_prefix (plist-get x :new_prefix))
-									 (new_posfix (plist-get x :new_posfix)))
-								     (s-trim (concat new_prefix (or new_posfix "")))))
+								    (new_posfix (plist-get x :new_posfix)))
+								(s-trim (concat new_prefix (or new_posfix "")))))
 						  :test #'s-equals-p))
 	       (completions (cl-remove-if #'tabnine--invalid-completion-p
 					  completions)))
@@ -669,7 +669,7 @@ PROCESS is the process under watch, OUTPUT is the output received."
 	  (setq tabnine--response result)
 	  (when (and result (tabnine--valid-response-p result))
             (setq tabnine--completion-cache-result result)
-	    (when (equal (point) tabnine--trigger-point)
+	    (when (and tabnine-mode (equal (point) tabnine--trigger-point))
 	      (tabnine--show-completion-1 result)))))
       (setq ss (cdr ss)))))
 
@@ -930,24 +930,24 @@ Use TRANSFORM-FN to transform completion if provided."
   (when (and (= correlation_id tabnine--correlation-id)
 	     (tabnine--satisfy-display-predicates))
     (tabnine-util--dbind (:new_prefix
-		     :old_suffix :new_suffix  :completion_metadata
-		     (:snippet_context (:completion_index))) completion
-		     (when (s-starts-with? old_prefix  new_prefix)
-		       (setq new_prefix (s-chop-prefix old_prefix new_prefix)))
-		     (save-restriction
-		       (widen)
-		       (let* ((completion-str (if (s-present? new_suffix)
-						  (concat new_prefix new_suffix)
-						new_prefix))
-			      (completion-data
-			       (list  :completion completion-str
-				      :new_prefix new_prefix
-				      :new_suffix new_suffix
-				      :old_suffix old_suffix
-				      :correlation_id correlation_id
-				      :completion_index completion_index
-				      :pos (point))))
-			 (tabnine--display-overlay-completion completion-data))))))
+			  :old_suffix :new_suffix  :completion_metadata
+			  (:snippet_context (:completion_index))) completion
+      (when (s-starts-with? old_prefix  new_prefix)
+	(setq new_prefix (s-chop-prefix old_prefix new_prefix)))
+      (save-restriction
+	(widen)
+	(let* ((completion-str (if (s-present? new_suffix)
+				   (concat new_prefix new_suffix)
+				 new_prefix))
+	       (completion-data
+		(list  :completion completion-str
+		       :new_prefix new_prefix
+		       :new_suffix new_suffix
+		       :old_suffix old_suffix
+		       :correlation_id correlation_id
+		       :completion_index completion_index
+		       :pos (point))))
+	  (tabnine--display-overlay-completion completion-data))))))
 
 (defun tabnine--display-overlay-completion (completion)
   "Show COMPLETION with overlay ."
@@ -1170,18 +1170,18 @@ command that triggered `post-command-hook'."
 (defun tabnine--construct-candidate-generic (candidate)
   "Generic function to construct completion string from a CANDIDATE."
   (tabnine-util--dbind (:new_prefix
-		   :old_suffix :new_suffix :completion_metadata
-		   (:kind :detail)) candidate
-		   (let ((type (tabnine--kind-to-type kind)))
-		     (propertize
-		      new_prefix
-		      'old_suffix old_suffix
-		      'new_suffix new_suffix
-		      'kind kind
-		      'type type
-		      'detail detail
-		      'annotation
-		      (concat (or detail "") " " (or type ""))))))
+			:old_suffix :new_suffix :completion_metadata
+			(:kind :detail)) candidate
+    (let ((type (tabnine--kind-to-type kind)))
+      (propertize
+       new_prefix
+       'old_suffix old_suffix
+       'new_suffix new_suffix
+       'kind kind
+       'type type
+       'detail detail
+       'annotation
+       (concat (or detail "") " " (or type ""))))))
 
 (defun tabnine--construct-candidates (results construct-candidate-fn)
   "Use CONSTRUCT-CANDIDATE-FN to construct a list of candidates from RESULTS."
@@ -1219,6 +1219,8 @@ command that triggered `post-command-hook'."
 ;;;###autoload
 (defun tabnine-completion-at-point ()
   "TabNine Completion at point function."
+  (unless tabnine-mode
+    (tabnine--on-change))
   (tabnine-complete t)
   (let* ((bounds (bounds-of-thing-at-point 'symbol))
 	 (pt (point))
