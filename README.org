@@ -24,9 +24,9 @@ An unofficial TabNine (with TabNine Chat supported) package for Emacs.
  [[file:./assets/screenshot-2.png]]
 @@html:</details>@@
 
-** disable displayed with overlay
+** disable overlay display
 
-If you want to use =capf= only, disable =tabnine-mode=.
+If you want to use =capf= only, disable =tabnine-mode= .
 
 * Setup
 
