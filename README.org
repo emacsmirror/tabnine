@@ -184,7 +184,7 @@ After installing the TabNine package, you should finish the installation by exec
 
 ** TabNine configuration
 
-The advanced features (e.g. advanced completions, TabNine Chat) require a =TabNine Pro= account. Open the TabNine Hub page with =tabnine-configuration= after installation. Then login with your account.
+The advanced features (e.g. advanced completions, TabNine Chat) require a =TabNine Pro= account. Use =tabnine-login= command to login your TabNine account.
 
 ** TabNine Chat
 

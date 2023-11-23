@@ -205,6 +205,9 @@ access-token: access token for TabNine API
 username: username in TabNine Hub
 avatar-url: avatar url in TabNine Hub.")
 
+(defvar tabnine--auth-token nil
+  "TabNine auth token, used for login.")
+
 (defvar tabnine--access-token nil
   "TabNine access token with plist.
 
@@ -338,6 +341,21 @@ REQUEST should be JSON-serializable object."
      :version tabnine--api-version
      :request
      (list :Configuration '(:__ t))))
+   ((eq method 'login-with-custom-token-url)
+    (list
+     :version tabnine--api-version
+     :request
+     (list :LoginWithCustomTokenUrl '(:__ t))))
+   ((eq method 'login-with-custom-token)
+    (list
+     :version tabnine--api-version
+     :request
+     (list :LoginWithCustomToken `(:custom_token ,tabnine--auth-token))))
+   ((eq method 'logout)
+    (list
+     :version tabnine--api-version
+     :request
+     (list :Logout '(:__ t))))
    ;; NotifyWorkspaceChanged
    ;; setState
    ;; StartupActions
@@ -555,6 +573,35 @@ REQUEST should be JSON-serializable object."
   (interactive)
   (tabnine--request 'configuration))
 
+(defun tabnine--login-with-custom-token-url()
+  "Login with custom token URL."
+  (tabnine--request 'login-with-custom-token-url))
+
+(defun tabnine-logout()
+  "Logout from TabNine."
+  (interactive)
+  (if (tabnine-state)
+      (tabnine--request 'logout)
+    (user-error "Already logout")))
+
+(defun tabnine-login()
+  "Login to TabNine."
+  (interactive)
+  (when (tabnine-state)
+    (user-error "Already signed in as %s!" (plist-get tabnine--user :username)))
+  (let ((token-url (tabnine--login-with-custom-token-url)))
+    (if token-url
+	(progn
+	  (read-from-minibuffer (format "Press ENTER to open TabNine Hub in your browser."))
+	  (browse-url token-url)
+	  (setq tabnine--auth-token (read-from-minibuffer (format "Paste auth token copied from page:")))
+	  (when (> (length tabnine--auth-token) 10)
+	    (tabnine--request 'login-with-custom-token))
+	  (if (tabnine-state)
+	      (message "Authenticated as TabNine user %s." (plist-get tabnine--user :username))
+	    (user-error "Login failed!")))
+      (user-error "Failed to get the token url from TabNine process!"))))
+
 ;;
 ;; Other helper functions
 ;;
@@ -639,8 +686,8 @@ PROCESS is the process under watch, EVENT is the event occurred."
 						  :test #'s-equals-p))
 	       (completions (cl-remove-duplicates completions
 						  :key (lambda (x) (let ((new_prefix (plist-get x :new_prefix))
-								    (new_posfix (plist-get x :new_posfix)))
-								(s-trim (concat new_prefix (or new_posfix "")))))
+									 (new_posfix (plist-get x :new_posfix)))
+								     (s-trim (concat new_prefix (or new_posfix "")))))
 						  :test #'s-equals-p))
 	       (completions (cl-remove-if #'tabnine--invalid-completion-p
 					  completions)))
