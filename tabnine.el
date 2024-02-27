@@ -7,7 +7,7 @@
 ;;         John Gong <gjtzone@hotmail.com>
 ;;
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "28.1") (dash "2.16.0") (s "1.12.0") (editorconfig "0.9.1") (vterm "0.0.2") (language-id "0.5.1") (transient "0.4.0"))
+;; Package-Requires: ((emacs "29.1") (dash "2.16.0") (s "1.12.0") (editorconfig "0.9.1") (vterm "0.0.2") (language-id "0.5.1") (transient "0.4.0"))
 ;; Keywords: convenience
 ;; URL: https://github.com/shuxiao9058/tabnine/
 
