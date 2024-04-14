@@ -1,12 +1,12 @@
 ;;; tabnine.el --- An unofficial TabNine package with TabNine Chat supported -*- lexical-binding: t -*-
 ;;
-;; Copyright (c) 2023  Aaron Ji
+;; Copyright (c) 2024  Aaron Ji
 ;;
 ;; Author: Aaron Ji <shuxiao9058@gmail.com>
 ;;         Tommy Xiang <tommyx058@gmail.com>
 ;;         John Gong <gjtzone@hotmail.com>
 ;;
-;; Version: 0.0.1
+;; Version: 0.0.2
 ;; Package-Requires: ((emacs "29.1") (dash "2.16.0") (s "1.12.0") (editorconfig "0.9.1") (vterm "0.0.2") (language-id "0.5.1") (transient "0.4.0"))
 ;; Keywords: convenience
 ;; URL: https://github.com/shuxiao9058/tabnine/
@@ -55,6 +55,7 @@
 
 (require 'tabnine-core)
 (require 'tabnine-chat)
+(require 'tabnine-chat-curl)
 (require 'tabnine-chat-transient)
 
 (provide 'tabnine)
