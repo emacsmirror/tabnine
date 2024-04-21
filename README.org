@@ -249,6 +249,10 @@ If candidate icons of tabnine are displayed wrongly [[https://github.com/shuxiao
 (add-to-list 'kind-icon-mapping `(tabnine ,(nerd-icons-codicon "nf-cod-hubot") :face font-lock-warning-face) t)
 #+end_src
 
+* Requirements
+
+- Emacs 27.1 or later
+
 * Thanks
 
 Thanks to the great work of [[https://github.com/TommyX12][Tommy Xiang]], [[https://github.com/zerolfx/copilot.el][zerolfx]] and [[https://github.com/karthink][karthink]].

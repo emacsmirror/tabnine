@@ -1,6 +1,6 @@
 ;;; tabnine-chat-transient.el --- TabNine Chat Transient -*- lexical-binding: t -*-
 
-;; Copyright (C) 2023  Aaron Ji
+;; Copyright (C) 2024  Aaron Ji
 
 ;; Author: Aaron Ji
 ;; Keywords: convenience
