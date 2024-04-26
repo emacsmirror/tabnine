@@ -39,6 +39,14 @@
 (require 'url)
 (require 'tabnine-util)
 
+
+;;
+;; Externals
+;;
+
+(declare-function vterm-delete-region "ext:vterm.el")
+(declare-function vterm-insert "ext:vterm.el")
+
 ;;
 ;; Constants
 ;;
@@ -917,8 +925,6 @@ Use TRANSFORM-FN to transform completion if provided."
 			    (point-max))))
       (if (eq major-mode 'vterm-mode)
 	  (progn
-	    (cl-eval-when (compile)
-	      (require 'vterm))
 	    (vterm-delete-region start end)
 	    (vterm-insert t-completion)))
       ;; maybe should not delete this line
