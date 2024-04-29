@@ -186,9 +186,7 @@ After installing the TabNine package, you should finish the installation by exec
 
 The advanced features (e.g. advanced completions, TabNine Chat) require a =TabNine Pro= account. Use =tabnine-login= command to login your TabNine account.
 
-** TabNine Chat
-
-TabNine Chat is still in BETA; to join the BETA, send =Tabnine Pro= email to =support@tabnine.com=. While chat fails you can try with VS Code to see whether the beta feature is available, also you can view your account's capabilities with the =tabnine-capabilities= function.
+** TabNine Chat predefined prompts
 
 | Command                             | Prompt                                        |
 |-------------------------------------+-----------------------------------------------|
