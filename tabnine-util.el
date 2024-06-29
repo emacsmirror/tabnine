@@ -66,22 +66,26 @@
 (defconst tabnine-util--indentation-alist
   (append '((latex-mode tex-indent-basic)
             (nxml-mode nxml-child-indent)
+	    (emacs-lisp-mode lisp-indent-offset)
             (python-mode python-indent py-indent-offset python-indent-offset)
 	    (python-ts-mode python-indent py-indent-offset python-indent-offset)
             (web-mode web-mode-markup-indent-offset web-mode-html-offset))
-          editorconfig-indentation-alist)
+	  editorconfig-indentation-alist)
   "Alist of `major-mode' to indentation map with optional fallbacks.")
 
 (defun tabnine-util--infer-indentation-offset ()
   "Infer indentation offset."
-  (or (let ((mode major-mode))
+  (or (let ((mode major-mode)
+	    (indentation-cons))
         (while (and (not (assq mode tabnine-util--indentation-alist))
                     (setq mode (get mode 'derived-mode-parent))))
         (when mode
-          (cl-some (lambda (s)
-                     (when (boundp s)
-		       (symbol-value s)))
-                   (alist-get mode tabnine-util--indentation-alist))))
+	  (setq indentation-cons (alist-get mode tabnine-util--indentation-alist))
+	  (unless (symbolp indentation-cons)
+	    (cl-some (lambda (s)
+		       (when (boundp s)
+			 (symbol-value s)))
+		     indentation-cons))))
       tab-width))
 
 ;; code from eglot
