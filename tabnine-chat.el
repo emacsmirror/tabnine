@@ -366,19 +366,28 @@ Should be messageContext's item or userContext' value."
 (defun tabnine-chat--code-around-by-line(line-count before)
   "TabNine Chat get code around BEFORE or after with LINE-COUNT."
   (save-excursion
-    (let* ((curr-line (line-number-at-pos))
-	   (lines (count-lines (point-min) (point-max)))
+    (let* ((seletecd (region-active-p))
 	   (point-min)
 	   (point-max))
       (save-excursion
 	(if before
-	    (forward-line (max 0 (- curr-line line-count)))
-	  (forward-line (min lines (+ curr-line 1))))
+	    (progn
+	      (when seletecd
+		(goto-char (region-beginning)))
+	      (forward-line (- line-count)))
+	  (when seletecd
+	    (goto-char (region-end)))
+	  (forward-line 1))
 	(setq point-min (line-beginning-position)))
       (save-excursion
 	(if before
-	    (forward-line (max 0 (- curr-line 1)))
-	  (forward-line (min lines (+ curr-line line-count))))
+	    (progn
+	      (when seletecd
+		(goto-char (region-beginning)))
+	      (forward-line -1))
+	  (when seletecd
+	    (goto-char (region-end)))
+	  (forward-line line-count))
 	(setq point-max (line-end-position)))
       (decode-coding-string
        (buffer-substring-no-properties point-min point-max)

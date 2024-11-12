@@ -690,15 +690,15 @@ PROCESS is the process under watch, EVENT is the event occurred."
   "Filter duplicates and bad COMPLETIONS result."
   (when completions
     (when-let* ((completions (cl-remove-duplicates completions
-						  :key (lambda (x) (plist-get x :new_prefix))
-						  :test #'s-equals-p))
-	       (completions (cl-remove-duplicates completions
-						  :key (lambda (x) (let ((new_prefix (plist-get x :new_prefix))
-									 (new_posfix (plist-get x :new_posfix)))
-								     (s-trim (concat new_prefix (or new_posfix "")))))
-						  :test #'s-equals-p))
-	       (completions (cl-remove-if #'tabnine--invalid-completion-p
-					  completions)))
+						   :key (lambda (x) (plist-get x :new_prefix))
+						   :test #'s-equals-p))
+		(completions (cl-remove-duplicates completions
+						   :key (lambda (x) (let ((new_prefix (plist-get x :new_prefix))
+								     (new_posfix (plist-get x :new_posfix)))
+								 (s-trim (concat new_prefix (or new_posfix "")))))
+						   :test #'s-equals-p))
+		(completions (cl-remove-if #'tabnine--invalid-completion-p
+					   completions)))
       completions)))
 
 (defun tabnine--process-filter (_ output)
@@ -721,11 +721,23 @@ PROCESS is the process under watch, OUTPUT is the output received."
       (when (s-present? str)
         (setq result (tabnine-util--read-json str))
 	(unless (equal result 'json-error)
-	  (setq tabnine--response result)
 	  (when (and result (tabnine--valid-response-p result))
-            (setq tabnine--completion-cache-result result)
+	    (when-let*  ((completions (tabnine--filter-completions (plist-get result :results))))
+	      (setq completions (cl-sort completions
+					 (lambda(a b)
+					   (let* ((get-detail-number-fn
+						   (lambda(x)
+						     (when-let* ((md (plist-get x :completion_metadata))
+								 (detail (plist-get md :detail)))
+						       (string-to-number (s-trim detail)))))
+						  (detail-a (funcall get-detail-number-fn a))
+						  (detail-b (funcall get-detail-number-fn b)))
+					     (> detail-a detail-b)))))
+	      (plist-put result :results completions))
+	    (setq tabnine--completion-cache-result result)
 	    (when (and tabnine-mode (equal (point) tabnine--trigger-point))
-	      (tabnine--show-completion-1 result)))))
+	      (tabnine--show-completion-1 result)))
+	  (setq tabnine--response result)))
       (setq ss (cdr ss)))))
 
 ;;
@@ -800,8 +812,7 @@ PROCESS is the process under watch, OUTPUT is the output received."
     (let* ((cache tabnine--completion-cache)
 	   (correlation_id (plist-get result :correlation_id))
 	   (old_prefix (plist-get cache :old_prefix))
-	   (completions (plist-get cache :results))
-	   (completions (tabnine--filter-completions completions)))
+	   (completions (plist-get cache :results)))
       (cond ((seq-empty-p completions)
 	     (message "No completion is available."))
 	    ((= (length completions) 1)
@@ -961,7 +972,7 @@ Use TRANSFORM-FN to transform completion if provided."
 (defun tabnine--show-completion-1 (response)
   "Show completion result after first get RESPONSE."
   (when-let* ((result response)
-	      (completions (tabnine--filter-completions (plist-get result :results)))
+	      (completions (plist-get result :results))
 	      (completion (if (seq-empty-p completions) nil (seq-elt completions 0)))
 	      (old_prefix (plist-get result :old_prefix))
 	      (new_prefix (plist-get completion :new_prefix))
@@ -1244,19 +1255,10 @@ command that triggered `post-command-hook'."
   "Get candidates for RESPONSE."
   (when (tabnine--response-display-with-capf-p response)
     (let* ((result response)
-	   (completions (tabnine--filter-completions (plist-get result :results)))
-	   (candidates (tabnine--construct-candidates
+	   (completions (plist-get result :results)))
+      (tabnine--construct-candidates
 			completions
-			#'tabnine--construct-candidate-generic)))
-      (cl-sort candidates
-	       (lambda(a b)
-		 (let* ((get-candidate-detail-number-fn
-			 (lambda(x)
-			   (let ((detail (get-text-property 0 'detail x)))
-			     (string-to-number (s-trim detail)))))
-			(detail-a (funcall get-candidate-detail-number-fn a))
-			(detail-b (funcall get-candidate-detail-number-fn b)))
-		   (> detail-a detail-b)))))))
+			#'tabnine--construct-candidate-generic))))
 
 (defun tabnine--post-completion (candidate)
   "Replace old suffix with new suffix for CANDIDATE."

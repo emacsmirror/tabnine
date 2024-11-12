@@ -60,13 +60,13 @@ INFO is a plist with the following keys:
           `(("Content-Type" . "application/json; charset=utf-8")
             ("Authorization" . ,(concat "Bearer " (tabnine--access-token)))))
 	 (request (tabnine-chat--make-request info))
-	 (url-request-data (tabnine-util--json-serialize request))
+	 (data-json (encode-coding-string (tabnine-util--json-serialize request) 'utf-8))
 	 (url-str (format "%s/chat/v1/generate_chat_response_async" tabnine-api-server))
 	 (curl-args (append
 		     (list "--location" "--silent" "--compressed" "--disable"
 			   (format "-X%s" "POST")
 			   (format "-m%s" 60)
-			   (format "-d%s" url-request-data))
+			   (format "-d%s" data-json))
 		     (when (and tabnine-network-proxy (stringp tabnine-network-proxy)
 				(not (string-empty-p tabnine-network-proxy)))
 		       (list "--insecure" "--proxy" tabnine-network-proxy))
