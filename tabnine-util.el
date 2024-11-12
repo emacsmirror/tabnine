@@ -168,11 +168,12 @@ Example of a UUID: 1df63142-a513-c850-31a3-535fc3520c3d."
   (if (progn
 	(require 'json)
 	(fboundp 'json-serialize))
-      `(json-serialize ,params
-		       :null-object nil
-		       :false-object :json-false)
+      `(encode-coding-string
+	(json-serialize ,params
+			:null-object nil
+			:false-object :json-false) 'utf-8)
     `(let ((json-false :json-false))
-       (json-encode ,params 'utf-8))))
+       (encode-coding-string (json-encode ,params) 'utf-8))))
 
 (defmacro tabnine-util--read-json (str)
   "Read JSON string STR.  and return the decoded object."

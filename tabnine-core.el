@@ -689,7 +689,7 @@ PROCESS is the process under watch, EVENT is the event occurred."
 (defun tabnine--filter-completions(completions)
   "Filter duplicates and bad COMPLETIONS result."
   (when completions
-    (when-let ((completions (cl-remove-duplicates completions
+    (when-let* ((completions (cl-remove-duplicates completions
 						  :key (lambda (x) (plist-get x :new_prefix))
 						  :test #'s-equals-p))
 	       (completions (cl-remove-duplicates completions
@@ -923,7 +923,7 @@ Use TRANSFORM-FN to transform completion if provided."
 	(delete-region (point)
 		       (min (+ (point) (length old_suffix))
 			    (point-max))))
-      (if (eq major-mode 'vterm-mode)
+      (if (derived-mode-p 'vterm-mode)
 	  (progn
 	    (vterm-delete-region start end)
 	    (vterm-insert t-completion)))
@@ -961,8 +961,7 @@ Use TRANSFORM-FN to transform completion if provided."
 (defun tabnine--show-completion-1 (response)
   "Show completion result after first get RESPONSE."
   (when-let* ((result response)
-	      (completions (plist-get result :results))
-	      (completions (tabnine--filter-completions completions))
+	      (completions (tabnine--filter-completions (plist-get result :results)))
 	      (completion (if (seq-empty-p completions) nil (seq-elt completions 0)))
 	      (old_prefix (plist-get result :old_prefix))
 	      (new_prefix (plist-get completion :new_prefix))
@@ -1244,9 +1243,11 @@ command that triggered `post-command-hook'."
 (defun tabnine--candidates (response)
   "Get candidates for RESPONSE."
   (when (tabnine--response-display-with-capf-p response)
-    (let ((candidates (tabnine--construct-candidates
-		       (plist-get response :results)
-		       #'tabnine--construct-candidate-generic)))
+    (let* ((result response)
+	   (completions (tabnine--filter-completions (plist-get result :results)))
+	   (candidates (tabnine--construct-candidates
+			completions
+			#'tabnine--construct-candidate-generic)))
       (cl-sort candidates
 	       (lambda(a b)
 		 (let* ((get-candidate-detail-number-fn

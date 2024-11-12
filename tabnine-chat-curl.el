@@ -48,26 +48,78 @@
 (defvar tabnine-chat-curl--process-alist nil
   "Alist of active TabNine Chat curl requests.")
 
+(defun tabnine-chat--generate-chat-response-async (info callback)
+  "Get TabNine Chat response async's streamId with INFO.
+Fetch TabNine  Chat response with CALLBACK.
+
+INFO is a plist with the following keys:
+- :prompt (the prompt being sent)
+- :buffer (the tabnine chat buffer)
+- :position (marker at which to insert the response)."
+  (let* ((headers
+          `(("Content-Type" . "application/json; charset=utf-8")
+            ("Authorization" . ,(concat "Bearer " (tabnine--access-token)))))
+	 (request (tabnine-chat--make-request info))
+	 (url-request-data (tabnine-util--json-serialize request))
+	 (url-str (format "%s/chat/v1/generate_chat_response_async" tabnine-api-server))
+	 (curl-args (append
+		     (list "--location" "--silent" "--compressed" "--disable"
+			   (format "-X%s" "POST")
+			   (format "-m%s" 60)
+			   (format "-d%s" url-request-data))
+		     (when (and tabnine-network-proxy (stringp tabnine-network-proxy)
+				(not (string-empty-p tabnine-network-proxy)))
+		       (list "--insecure" "--proxy" tabnine-network-proxy))
+		     (cl-loop for (key . val) in headers
+			      collect (format "-H%s: %s" key val))
+		     (list url-str)))
+	 (process (apply #'start-process "tabnine-chat-curl-1"
+                         (generate-new-buffer tabnine-chat--curl-buffer-name) "curl" curl-args)))
+
+    (process-put process 'callback callback)
+    (process-put process 'info info)
+    (set-process-sentinel process #'tabnine-chat---sentinel-1)))
+
+(defun tabnine-chat---sentinel-1 (process _)
+  "Process sentinel for TabNine Chat curl requests.
+
+PROCESS is process parameters."
+  (let ((info (process-get process 'info))
+	(callback (process-get process 'callback))
+	(status (process-exit-status process))
+	(proc-buf (process-buffer process))
+	(stream-id))
+    (if (= 0 status)
+	(with-current-buffer proc-buf
+	  (when-let* ((body (buffer-string))
+		      (body-trim (s-trim body))
+		      (decoded (tabnine-util--read-json body-trim)))
+	    (setq stream-id (plist-get decoded :streamId))))
+      (message "Process exit failed."))
+    (setf (alist-get process tabnine-chat-curl--process-alist nil 'remove) nil)
+    (kill-buffer proc-buf)
+    (when stream-id
+      (plist-put info :stream-id stream-id)
+      (funcall
+       #'tabnine-chat-curl-get-response info callback))))
+
 (defun tabnine-chat-curl--get-args (info token)
   "Produce list of arguments for calling Curl.
 
 INFO is the chat info to send, TOKEN is a unique identifier.."
-  (let* ((request (tabnine-chat--make-request info))
-	 (data (tabnine-util--json-serialize request))
-	 (url (format "%s/chat/v3/generate_chat_response" tabnine-api-server))
+  (let* ((stream-id (plist-get info :stream-id))
+	 (url (format "%s/chat/v1/stream/%s/wait" tabnine-api-server stream-id))
          (headers
-          `(("Content-Type" . "application/json; charset=utf-8")
-            ("Authorization" . ,(concat "Bearer " (tabnine--access-token))))))
+          `(("Authorization" . ,(concat "Bearer " (tabnine--access-token))))))
     (append
      (list "--location" "--silent" "--compressed" "--disable"
-           (format "-X%s" "POST")
+           (format "-X%s" "GET")
            (format "-w(%s . %%{size_header})" token)
            (format "-m%s" 60)
-           "-D-"
-           (format "-d%s" data))
+           "-D-")
      (when (and tabnine-network-proxy (stringp tabnine-network-proxy)
 		(not (string-empty-p tabnine-network-proxy)))
-       (list "--proxy" tabnine-network-proxy))
+       (list "--insecure" "--proxy" tabnine-network-proxy))
      (cl-loop for (key . val) in headers
               collect (format "-H%s: %s" key val))
      (list url))))
@@ -229,7 +281,7 @@ PROCESS is the process under watch, OUTPUT is the output received."
               display-buffer-pop-up-window)
              (reusable-frames . visible)))))
 
-      (when-let ((http-msg (plist-get proc-info :status))
+      (when-let* ((http-msg (plist-get proc-info :status))
                  (http-status (plist-get proc-info :http-status)))
         ;; Find data chunk(s) and run callback
         (when (equal http-status "200")
@@ -245,7 +297,9 @@ PROCESS is the process under watch, OUTPUT is the output received."
 							 (end-of-line) (point)))
 						      'utf-8))
 				       (response (tabnine-util--read-json (s-trim line-content)))
-				       (content (plist-get response :text)))
+				       (content (or (when-let* ((value (plist-get response :value))
+								(text (plist-get value :text)))
+						      text) "")))
 			     (push content content-strs))
 			   (forward-line))
 		       (error
