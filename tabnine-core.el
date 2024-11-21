@@ -670,16 +670,18 @@ PROCESS is the process under watch, EVENT is the event occurred."
       (<= line 2))))
 
 (defun tabnine--response-display-with-capf-p(response)
-  "Test RESPONSE whether display with capf."
+  "Test RESPONSE whether display with capf, prefer display with overlay."
   (when response
     (let* ((display-with-overlay)
 	   (results (plist-get response :results)))
-      (mapc (lambda(x)
-	      (unless (tabnine--completion-capf-p x)
-		(setq display-with-overlay t))) results)
-      (when (not tabnine--trigger-with-capf)
+      (if tabnine--trigger-with-capf
+	  (catch 'break
+	    (mapc (lambda(x)
+		    (unless (tabnine--completion-capf-p x)
+		      (setq display-with-overlay t)
+		      (throw 'break nil))) results))
 	(setq display-with-overlay t))
-      (or (not tabnine-mode) (not display-with-overlay)))))
+      (not (and tabnine-mode display-with-overlay)))))
 
 (defun tabnine--response-latest-completion-p(response)
   "Test RESPONSE if the latest completion."

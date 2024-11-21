@@ -86,7 +86,7 @@
 		       (when (boundp s)
 			 (symbol-value s)))
 		     indentation-cons))))
-      tab-width))
+      standard-indent))
 
 ;; code from eglot
 (defconst tabnine-util--uri-path-allowed-chars
