@@ -84,7 +84,9 @@
 	  (unless (symbolp indentation-cons)
 	    (cl-some (lambda (s)
 		       (when (boundp s)
-			 (symbol-value s)))
+			 (let ((value (symbol-value s)))
+			   (when (and value (numberp value))
+			     value))))
 		     indentation-cons))))
       standard-indent))
 
