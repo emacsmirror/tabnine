@@ -735,6 +735,7 @@ PROCESS is the process under watch, OUTPUT is the output received."
 						  (detail-a (funcall get-detail-number-fn a))
 						  (detail-b (funcall get-detail-number-fn b)))
 					     (> detail-a detail-b)))))
+	      (setq tabnine--consecutive-restart-count 0)
 	      (plist-put result :results completions))
 	    (setq tabnine--completion-cache-result result)
 	    (when (and tabnine-mode (equal (point) tabnine--trigger-point))
